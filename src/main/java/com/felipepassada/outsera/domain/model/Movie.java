@@ -3,12 +3,13 @@ package com.felipepassada.outsera.domain.model;
 import jakarta.persistence.*;
 import lombok.*;
 
+import java.util.HashSet;
 import java.util.Set;
 
 @Entity
 @Table(name = "movies")
 @Data
-@EqualsAndHashCode(of = "id")
+@EqualsAndHashCode(of = {"title", "year"})
 @ToString(exclude = "producers")
 @NoArgsConstructor
 @AllArgsConstructor
@@ -36,5 +37,14 @@ public class Movie {
         joinColumns = @JoinColumn(name = "movie_id"),
         inverseJoinColumns = @JoinColumn(name = "producer_id")
     )
-    private Set<Producer> producers;
+    private Set<Producer> producers = new HashSet<>();
+
+    public void addProducer(Producer producer) {
+        if (!this.producers.contains(producer)) {
+            this.producers.add(producer);
+        }
+        if (!producer.getMovies().contains(this)) {
+            producer.getMovies().add(this);
+        }
+    }
 }
