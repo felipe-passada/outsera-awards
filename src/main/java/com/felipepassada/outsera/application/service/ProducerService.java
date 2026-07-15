@@ -1,71 +1,43 @@
 package com.felipepassada.outsera.application.service;
 
-import com.felipepassada.outsera.domain.dto.ProducerAwardInterval;
 import com.felipepassada.outsera.domain.dto.IntervalResultResponse;
-import com.felipepassada.outsera.domain.model.Movie;
 import com.felipepassada.outsera.domain.model.Producer;
+import com.felipepassada.outsera.domain.service.AwardIntervalCalculator;
 import com.felipepassada.outsera.infra.repository.ProducerRepository;
-import org.springframework.beans.factory.annotation.Autowired;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.stereotype.Service;
 
-import java.util.ArrayList;
 import java.util.List;
 
+@Slf4j
 @Service
 public class ProducerService {
 
-    @Autowired
-    private ProducerRepository producerRepository;
+    private final ProducerRepository producerRepository;
+    private final AwardIntervalCalculator awardIntervalCalculator;
+
+    public ProducerService(ProducerRepository producerRepository, AwardIntervalCalculator awardIntervalCalculator) {
+        this.producerRepository = producerRepository;
+        this.awardIntervalCalculator = awardIntervalCalculator;
+    }
 
     public IntervalResultResponse getAwardIntervals() {
+        log.info("Starting database query to fetch winning producers for interval calculation.");
 
-        var producers = producerRepository.findAllWinnersWithMovies();
+        List<Producer> winnersWithMovies = producerRepository.findAllWinnersWithMovies();
 
-        List<ProducerAwardInterval> allIntervals = producers.stream()
-                .flatMap(producer -> calculateIntervalsForProducer(producer).stream())
-                .toList();
-
-        if (allIntervals.isEmpty()) {
+        if (winnersWithMovies.isEmpty()) {
+            log.warn("No winning producers were returned from the database.");
             return new IntervalResultResponse(List.of(), List.of());
         }
 
-        int minIntervalValue = allIntervals.stream()
-                .mapToInt(ProducerAwardInterval::interval)
-                .min()
-                .orElse(Integer.MAX_VALUE);
+        log.debug("Starting award interval calculation for {} winning producers.", winnersWithMovies.size());
+        IntervalResultResponse result = awardIntervalCalculator.calculateMinMaxAwardIntervals(winnersWithMovies);
 
-        int maxIntervalValue = allIntervals.stream()
-                .mapToInt(ProducerAwardInterval::interval)
-                .max()
-                .orElse(Integer.MIN_VALUE);
+        log.info("Award intervals successfully calculated. Min intervals count: {}, Max intervals count: {}.",
+                result.min().size(), result.max().size());
 
-        List<ProducerAwardInterval> minIntervals = allIntervals.stream()
-                .filter(prodAwIn -> prodAwIn.interval() == minIntervalValue)
-                .toList();
-
-        List<ProducerAwardInterval> maxIntervals = allIntervals.stream()
-                .filter(prodAwIn -> prodAwIn.interval() == maxIntervalValue)
-                .toList();
-
-        return new IntervalResultResponse(minIntervals, maxIntervals);
-
-    }
-
-    private List<ProducerAwardInterval> calculateIntervalsForProducer(Producer producer) {
-        var winningYears = producer.getMovies().stream()
-                .filter(Movie::getWinner)
-                .map(Movie::getYear)
-                .sorted()
-                .toList();
-
-        List<ProducerAwardInterval> intervals = new ArrayList<>();
-
-        for (int i = 1; i < winningYears.size(); i++) {
-            int interval = winningYears.get(i) - winningYears.get(i - 1);
-            intervals.add(new ProducerAwardInterval(producer.getName(), interval, winningYears.get(i - 1), winningYears.get(i)));
-        }
-
-        return intervals;
+        return result;
     }
 
 }
